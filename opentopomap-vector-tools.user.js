@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         OpenTopoMap Vector – saját beállítások
 // @namespace    local.opentopomap
-// @version      2.1
-// @description  Feliratméret, szintvonal-vastagság és opcionális OSM csúcs/nyereg nevek
+// @version      2.2
+// @description  Feliratméret, szintvonal-vastagság és -szín, valamint opcionális OSM csúcs/nyereg nevek
 // @match        https://www.opentopomap.org/vector/*
 // @match        https://opentopomap.org/vector/*
 // @run-at       document-start
@@ -26,22 +26,64 @@
     // BEÁLLÍTÁSOK
     // ============================================================
 
-    const LABEL_KEY   = 'otm-label-scale';
+    const LABEL_KEY = 'otm-label-scale';
     const CONTOUR_KEY = 'otm-contour-scale';
+    const CONTOUR_COLOR_KEY = 'otm-contour-color';
 
-    const CACHE_DATA_KEY   = 'otm-extra-cache-data-v2';
+    const CACHE_DATA_KEY = 'otm-extra-cache-data-v2';
     const CACHE_BOUNDS_KEY = 'otm-extra-cache-bounds-v2';
-    const CACHE_TIME_KEY   = 'otm-extra-cache-time-v2';
+    const CACHE_TIME_KEY = 'otm-extra-cache-time-v2';
 
-    const SCALE_VALUES = [1, 1.25, 1.5, 1.75, 2];
+    const CONTOUR_SCALE_VALUES = [1, 1.25, 1.5, 1.75, 2];
+
+    const CONTOUR_COLORS = {
+        original: {
+            label: 'Eredeti',
+            color: null
+        },
+        darkbrown: {
+            label: 'Sötétbarna',
+            color: '#6b3a1e'
+        },
+        darkgray: {
+            label: 'Sötétszürke',
+            color: '#444444'
+        },
+        black: {
+            label: 'Fekete',
+            color: '#000000'
+        }
+    };
+
     const EXTRA_MIN_ZOOM = 12;
     const CACHE_MAX_AGE = 6 * 60 * 60 * 1000;
 
     let labelScale =
         Number(localStorage.getItem(LABEL_KEY) || 1.5);
 
+    // Régi vagy hibás tárolt értékek korlátozása 100–300%-ra.
+    labelScale =
+        Math.min(
+            3,
+            Math.max(
+                1,
+                Math.round(labelScale * 4) / 4
+            )
+        );
+
     let contourScale =
         Number(localStorage.getItem(CONTOUR_KEY) || 1.5);
+
+    if (!CONTOUR_SCALE_VALUES.includes(contourScale)) {
+        contourScale = 1.5;
+    }
+
+    let contourColor =
+        localStorage.getItem(CONTOUR_COLOR_KEY) || 'original';
+
+    if (!CONTOUR_COLORS[contourColor]) {
+        contourColor = 'original';
+    }
 
     // Minden oldalbetöltéskor kikapcsolva indul.
     let extraNamesOn = false;
@@ -68,7 +110,10 @@
     let capturedMap = null;
 
     const originalTextSizes = new Map();
+
     let originalContourWidth = null;
+    let originalContourLineColor = null;
+    let originalContourLabelColor = null;
 
     const EXTRA_SOURCE = 'otm-extra-relief-source';
     const EXTRA_PEAKS = 'otm-extra-relief-peaks';
@@ -125,15 +170,16 @@
 
                         this.on('load', () => {
                             rememberOriginalTextSizes();
-                            rememberOriginalContourWidth();
+                            rememberOriginalContourStyle();
 
                             applyLabelScale();
                             applyContourScale();
+                            applyContourColor();
 
                             extraNamesOn = false;
                             extraStatusText = 'OSM-nevek: KI';
 
-                            updateButtons();
+                            updateControls();
                             updateStatus();
                         });
 
@@ -342,7 +388,7 @@
         }
 
         applyExtraLabelScale();
-        updateButtons();
+        updateControls();
     }
 
     function applyExtraLabelScale() {
@@ -366,64 +412,159 @@
     }
 
     // ============================================================
-    // SZINTVONAL-VASTAGSÁG
+    // SZINTVONAL – EREDETI STÍLUS
     // ============================================================
 
-    function rememberOriginalContourWidth() {
-        if (
-            !capturedMap ||
-            originalContourWidth !== null
-        ) {
-            return;
-        }
+    function rememberOriginalContourStyle() {
+        if (!capturedMap) return;
 
         try {
-            const width =
-                capturedMap.getPaintProperty(
-                    'contour-lines',
-                    'line-width'
-                );
+            if (originalContourWidth === null) {
+                const width =
+                    capturedMap.getPaintProperty(
+                        'contour-lines',
+                        'line-width'
+                    );
 
-            if (width != null) {
-                originalContourWidth =
-                    structuredClone(width);
+                if (width != null) {
+                    originalContourWidth =
+                        structuredClone(width);
+                }
+            }
+
+            if (originalContourLineColor === null) {
+                const lineColor =
+                    capturedMap.getPaintProperty(
+                        'contour-lines',
+                        'line-color'
+                    );
+
+                if (lineColor != null) {
+                    originalContourLineColor =
+                        structuredClone(lineColor);
+                }
+            }
+
+            if (originalContourLabelColor === null) {
+                const labelColor =
+                    capturedMap.getPaintProperty(
+                        'contour-labels',
+                        'text-color'
+                    );
+
+                if (labelColor != null) {
+                    originalContourLabelColor =
+                        structuredClone(labelColor);
+                }
             }
 
         } catch (e) {
             console.warn(
-                'Szintvonal:',
+                'Szintvonal eredeti stílusa:',
                 e
             );
         }
     }
 
+    // ============================================================
+    // SZINTVONAL-VASTAGSÁG
+    // ============================================================
+
     function applyContourScale() {
         if (!capturedMap) return;
 
-        rememberOriginalContourWidth();
+        rememberOriginalContourStyle();
 
         if (originalContourWidth == null) {
             return;
         }
 
         try {
-            capturedMap.setPaintProperty(
-                'contour-lines',
-                'line-width',
-                scaleExpression(
-                    originalContourWidth,
-                    contourScale
-                )
-            );
+            if (capturedMap.getLayer('contour-lines')) {
+                capturedMap.setPaintProperty(
+                    'contour-lines',
+                    'line-width',
+                    scaleExpression(
+                        originalContourWidth,
+                        contourScale
+                    )
+                );
+            }
 
         } catch (e) {
             console.warn(
-                'Szintvonal:',
+                'Szintvonal-vastagság:',
                 e
             );
         }
 
-        updateButtons();
+        updateControls();
+    }
+
+    // ============================================================
+    // SZINTVONAL-SZÍN
+    // ============================================================
+
+    function applyContourColor() {
+        if (!capturedMap) return;
+
+        rememberOriginalContourStyle();
+
+        try {
+            let lineColor;
+            let labelColor;
+
+            if (contourColor === 'original') {
+                lineColor =
+                    originalContourLineColor;
+
+                labelColor =
+                    originalContourLabelColor;
+
+            } else {
+                const selected =
+                    CONTOUR_COLORS[
+                        contourColor
+                    ]?.color;
+
+                lineColor = selected;
+                labelColor = selected;
+            }
+
+            if (
+                lineColor != null &&
+                capturedMap.getLayer(
+                    'contour-lines'
+                )
+            ) {
+                capturedMap.setPaintProperty(
+                    'contour-lines',
+                    'line-color',
+                    structuredClone(lineColor)
+                );
+            }
+
+            if (
+                labelColor != null &&
+                capturedMap.getLayer(
+                    'contour-labels'
+                )
+            ) {
+                capturedMap.setPaintProperty(
+                    'contour-labels',
+                    'text-color',
+                    structuredClone(labelColor)
+                );
+            }
+
+        } catch (e) {
+            console.warn(
+                'Szintvonal-szín:',
+                e
+            );
+        }
+
+        updateControls();
     }
 
     // ============================================================
@@ -587,7 +728,7 @@
         if (!capturedMap) return;
 
         if (extraNamesOn) {
-            updateButtons();
+            updateControls();
             return;
         }
 
@@ -607,7 +748,7 @@
             extraStatusText =
                 `OSM-nevek: BE · ${EXTRA_MIN_ZOOM}-es zoomtól`;
 
-            updateButtons();
+            updateControls();
             updateStatus();
             return;
         }
@@ -620,7 +761,7 @@
                 'OSM-nevek: BE · lekérdezés indul…';
         }
 
-        updateButtons();
+        updateControls();
         updateStatus();
 
         // BE-kapcsoláskor mindig kérünk friss adatot is.
@@ -658,7 +799,7 @@
         extraStatusText =
             'OSM-nevek: KI';
 
-        updateButtons();
+        updateControls();
         updateStatus();
     }
 
@@ -1048,7 +1189,7 @@
         } finally {
             if (
                 myEpoch ===
-                extraRequestEpoch
+                    extraRequestEpoch
             ) {
                 requestInFlight = false;
                 activeRequest = null;
@@ -1497,17 +1638,12 @@ out body;
         Object.assign(
             panel.style,
             {
-                position:
-                    'fixed',
+                position: 'fixed',
+                top: '12px',
+                right: '12px',
+                zIndex: '999999',
 
-                top:
-                    '12px',
-
-                right:
-                    '12px',
-
-                zIndex:
-                    '999999',
+                width: '285px',
 
                 background:
                     'rgba(255,255,255,.96)',
@@ -1518,9 +1654,6 @@ out body;
                 borderRadius:
                     '8px',
 
-                padding:
-                    '9px',
-
                 boxShadow:
                     '0 2px 8px rgba(0,0,0,.25)',
 
@@ -1528,51 +1661,541 @@ out body;
                     '13px Arial,sans-serif',
 
                 color:
+                    '#000',
+
+                overflow:
+                    'hidden'
+            }
+        );
+
+        // --------------------------------------------------------
+        // FEJLÉC + ÖSSZECSUKÁS
+        // --------------------------------------------------------
+
+        const header =
+            document.createElement(
+                'div'
+            );
+
+        Object.assign(
+            header.style,
+            {
+                display:
+                    'flex',
+
+                alignItems:
+                    'center',
+
+                justifyContent:
+                    'space-between',
+
+                gap:
+                    '10px',
+
+                padding:
+                    '8px 9px',
+
+                fontWeight:
+                    'bold',
+
+                cursor:
+                    'pointer',
+
+                userSelect:
+                    'none',
+
+                background:
+                    '#f1f1f1'
+            }
+        );
+
+        const headerTitle =
+            document.createElement(
+                'span'
+            );
+
+        headerTitle.textContent =
+            'OpenTopoMap beállítások';
+
+        const collapseButton =
+            document.createElement(
+                'button'
+            );
+
+        collapseButton.type =
+            'button';
+
+        collapseButton.textContent =
+            '▲';
+
+        collapseButton.title =
+            'Panel összecsukása';
+
+        Object.assign(
+            collapseButton.style,
+            {
+                border:
+                    'none',
+
+                background:
+                    'transparent',
+
+                padding:
+                    '1px 4px',
+
+                fontSize:
+                    '14px',
+
+                cursor:
+                    'pointer'
+            }
+        );
+
+        header.appendChild(
+            headerTitle
+        );
+
+        header.appendChild(
+            collapseButton
+        );
+
+        panel.appendChild(header);
+
+        const body =
+            document.createElement(
+                'div'
+            );
+
+        body.id =
+            'otm-control-body';
+
+        body.style.padding =
+            '9px';
+
+        panel.appendChild(body);
+
+        let collapsed = false;
+
+        function togglePanel() {
+            collapsed =
+                !collapsed;
+
+            body.style.display =
+                collapsed
+                    ? 'none'
+                    : 'block';
+
+            collapseButton.textContent =
+                collapsed
+                    ? '▼'
+                    : '▲';
+
+            collapseButton.title =
+                collapsed
+                    ? 'Panel kinyitása'
+                    : 'Panel összecsukása';
+        }
+
+        header.onclick =
+            togglePanel;
+
+        collapseButton.onclick =
+            event => {
+                event.stopPropagation();
+                togglePanel();
+            };
+
+        // --------------------------------------------------------
+        // FELIRATMÉRET – CSÚSZKA
+        // --------------------------------------------------------
+
+        const labelTitle =
+            sectionTitle(
+                'Feliratméret'
+            );
+
+        body.appendChild(
+            labelTitle
+        );
+
+        const sliderRow =
+            document.createElement(
+                'div'
+            );
+
+        Object.assign(
+            sliderRow.style,
+            {
+                display:
+                    'flex',
+
+                alignItems:
+                    'center',
+
+                gap:
+                    '8px'
+            }
+        );
+
+        const slider =
+            document.createElement(
+                'input'
+            );
+
+        slider.id =
+            'otm-label-slider';
+
+        slider.type =
+            'range';
+
+        slider.min =
+            '100';
+
+        slider.max =
+            '300';
+
+        slider.step =
+            '25';
+
+        slider.value =
+            String(
+                Math.round(
+                    labelScale * 100
+                )
+            );
+
+        Object.assign(
+            slider.style,
+            {
+                flex:
+                    '1',
+
+                minWidth:
+                    '0'
+            }
+        );
+
+        const labelValue =
+            document.createElement(
+                'span'
+            );
+
+        labelValue.id =
+            'otm-label-value';
+
+        labelValue.textContent =
+            `${Math.round(
+                labelScale * 100
+            )}%`;
+
+        Object.assign(
+            labelValue.style,
+            {
+                width:
+                    '45px',
+
+                textAlign:
+                    'right',
+
+                fontWeight:
+                    'bold'
+            }
+        );
+
+        slider.oninput =
+            () => {
+                labelScale =
+                    Number(
+                        slider.value
+                    ) / 100;
+
+                localStorage.setItem(
+                    LABEL_KEY,
+                    String(labelScale)
+                );
+
+                labelValue.textContent =
+                    `${slider.value}%`;
+
+                applyLabelScale();
+            };
+
+        sliderRow.appendChild(
+            slider
+        );
+
+        sliderRow.appendChild(
+            labelValue
+        );
+
+        body.appendChild(
+            sliderRow
+        );
+
+        const sliderLimits =
+            document.createElement(
+                'div'
+            );
+
+        Object.assign(
+            sliderLimits.style,
+            {
+                display:
+                    'flex',
+
+                justifyContent:
+                    'space-between',
+
+                marginTop:
+                    '-2px',
+
+                marginRight:
+                    '53px',
+
+                fontSize:
+                    '10px',
+
+                color:
+                    '#777'
+            }
+        );
+
+        sliderLimits.innerHTML =
+            '<span>100%</span><span>300%</span>';
+
+        body.appendChild(
+            sliderLimits
+        );
+
+        // --------------------------------------------------------
+        // SZINTVONAL-VASTAGSÁG
+        // --------------------------------------------------------
+
+        body.appendChild(
+            sectionTitle(
+                'Szintvonal'
+            )
+        );
+
+        const thicknessLabel =
+            smallLabel(
+                'Vastagság'
+            );
+
+        body.appendChild(
+            thicknessLabel
+        );
+
+        const contourButtons =
+            document.createElement(
+                'div'
+            );
+
+        contourButtons.style.whiteSpace =
+            'nowrap';
+
+        for (
+            const value
+            of CONTOUR_SCALE_VALUES
+        ) {
+            const button =
+                document.createElement(
+                    'button'
+                );
+
+            button.textContent =
+                `${Math.round(
+                    value * 100
+                )}%`;
+
+            button.dataset.contourScale =
+                String(value);
+
+            Object.assign(
+                button.style,
+                buttonStyle()
+            );
+
+            button.onclick =
+                () => {
+                    contourScale =
+                        value;
+
+                    localStorage.setItem(
+                        CONTOUR_KEY,
+                        String(value)
+                    );
+
+                    applyContourScale();
+                };
+
+            contourButtons.appendChild(
+                button
+            );
+        }
+
+        body.appendChild(
+            contourButtons
+        );
+
+        // --------------------------------------------------------
+        // SZINTVONAL-SZÍN
+        // --------------------------------------------------------
+
+        const colorRow =
+            document.createElement(
+                'div'
+            );
+
+        Object.assign(
+            colorRow.style,
+            {
+                display:
+                    'flex',
+
+                alignItems:
+                    'center',
+
+                gap:
+                    '8px',
+
+                marginTop:
+                    '7px'
+            }
+        );
+
+        const colorLabel =
+            document.createElement(
+                'span'
+            );
+
+        colorLabel.textContent =
+            'Szín';
+
+        colorLabel.style.fontSize =
+            '12px';
+
+        const colorSelect =
+            document.createElement(
+                'select'
+            );
+
+        colorSelect.id =
+            'otm-contour-color';
+
+        Object.assign(
+            colorSelect.style,
+            {
+                flex:
+                    '1',
+
+                padding:
+                    '4px 5px',
+
+                border:
+                    '1px solid #888',
+
+                borderRadius:
+                    '5px',
+
+                background:
+                    '#fff',
+
+                color:
                     '#000'
             }
         );
 
-        addScaleSection(
-            panel,
-            'Feliratméret',
-            'label'
+        for (
+            const [key, option]
+            of Object.entries(
+                CONTOUR_COLORS
+            )
+        ) {
+            const element =
+                document.createElement(
+                    'option'
+                );
+
+            element.value =
+                key;
+
+            element.textContent =
+                option.label;
+
+            colorSelect.appendChild(
+                element
+            );
+        }
+
+        colorSelect.value =
+            contourColor;
+
+        colorSelect.onchange =
+            () => {
+                contourColor =
+                    colorSelect.value;
+
+                localStorage.setItem(
+                    CONTOUR_COLOR_KEY,
+                    contourColor
+                );
+
+                applyContourColor();
+            };
+
+        colorRow.appendChild(
+            colorLabel
         );
 
-        addScaleSection(
-            panel,
-            'Szintvonal',
-            'contour'
+        colorRow.appendChild(
+            colorSelect
+        );
+
+        body.appendChild(
+            colorRow
+        );
+
+        const colorHint =
+            document.createElement(
+                'div'
+            );
+
+        colorHint.textContent =
+            'A magasságszámok színe is követi a szintvonalét.';
+
+        Object.assign(
+            colorHint.style,
+            {
+                marginTop:
+                    '4px',
+
+                fontSize:
+                    '10px',
+
+                color:
+                    '#666'
+            }
+        );
+
+        body.appendChild(
+            colorHint
         );
 
         // --------------------------------------------------------
         // DOMBORZATI NEVEK
         // --------------------------------------------------------
 
-        const title =
-            document.createElement(
-                'div'
-            );
-
-        title.textContent =
-            'Domborzati nevek';
-
-        title.style.fontWeight =
-            'bold';
-
-        title.style.marginTop =
-            '10px';
-
-        title.style.marginBottom =
-            '5px';
-
-        panel.appendChild(title);
+        body.appendChild(
+            sectionTitle(
+                'Domborzati nevek'
+            )
+        );
 
         const extraButtons =
             document.createElement(
                 'div'
             );
-
-        // BE
 
         const onButton =
             document.createElement(
@@ -1597,8 +2220,6 @@ out body;
             onButton
         );
 
-        // KI
-
         const offButton =
             document.createElement(
                 'button'
@@ -1621,8 +2242,6 @@ out body;
         extraButtons.appendChild(
             offButton
         );
-
-        // FRISSÍTÉS
 
         const refreshButton =
             document.createElement(
@@ -1647,7 +2266,7 @@ out body;
             refreshButton
         );
 
-        panel.appendChild(
+        body.appendChild(
             extraButtons
         );
 
@@ -1673,7 +2292,7 @@ out body;
             }
         );
 
-        panel.appendChild(hint);
+        body.appendChild(hint);
 
         // --------------------------------------------------------
         // ÁLLAPOT
@@ -1710,112 +2329,75 @@ out body;
             }
         );
 
-        panel.appendChild(status);
-        document.body.appendChild(panel);
+        body.appendChild(status);
 
-        updateButtons();
+        document.body.appendChild(
+            panel
+        );
+
+        updateControls();
         updateStatus();
     }
 
-    function addScaleSection(
-        panel,
-        titleText,
-        type
-    ) {
+    function sectionTitle(text) {
         const title =
             document.createElement(
                 'div'
             );
 
         title.textContent =
-            titleText;
+            text;
 
-        title.style.fontWeight =
-            'bold';
+        Object.assign(
+            title.style,
+            {
+                fontWeight:
+                    'bold',
 
-        title.style.marginTop =
-            type === 'contour'
-                ? '10px'
-                : '0';
+                marginTop:
+                    '10px',
 
-        title.style.marginBottom =
-            '5px';
+                marginBottom:
+                    '5px'
+            }
+        );
 
-        panel.appendChild(title);
+        return title;
+    }
 
-        const container =
+    function smallLabel(text) {
+        const label =
             document.createElement(
                 'div'
             );
 
-        for (
-            const value
-            of SCALE_VALUES
-        ) {
-            const button =
-                document.createElement(
-                    'button'
-                );
+        label.textContent =
+            text;
 
-            button.textContent =
-                `${Math.round(
-                    value * 100
-                )}%`;
+        Object.assign(
+            label.style,
+            {
+                fontSize:
+                    '12px',
 
-            button.dataset.type =
-                type;
+                marginBottom:
+                    '4px',
 
-            button.dataset.scale =
-                String(value);
-
-            Object.assign(
-                button.style,
-                buttonStyle()
-            );
-
-            button.onclick =
-                () => {
-
-                    if (
-                        type === 'label'
-                    ) {
-                        labelScale =
-                            value;
-
-                        localStorage.setItem(
-                            LABEL_KEY,
-                            String(value)
-                        );
-
-                        applyLabelScale();
-
-                    } else {
-                        contourScale =
-                            value;
-
-                        localStorage.setItem(
-                            CONTOUR_KEY,
-                            String(value)
-                        );
-
-                        applyContourScale();
-                    }
-                };
-
-            container.appendChild(
-                button
-            );
-        }
-
-        panel.appendChild(
-            container
+                color:
+                    '#444'
+            }
         );
+
+        return label;
     }
 
     function buttonStyle() {
         return {
             marginRight:
                 '4px',
+
+            marginBottom:
+                '3px',
 
             padding:
                 '4px 7px',
@@ -1834,37 +2416,65 @@ out body;
         };
     }
 
-    function updateButtons() {
+    // ============================================================
+    // KEZELŐSZERVEK FRISSÍTÉSE
+    // ============================================================
+
+    function updateControls() {
+        const slider =
+            document.getElementById(
+                'otm-label-slider'
+            );
+
+        const labelValue =
+            document.getElementById(
+                'otm-label-value'
+            );
+
+        if (slider) {
+            slider.value =
+                String(
+                    Math.round(
+                        labelScale * 100
+                    )
+                );
+        }
+
+        if (labelValue) {
+            labelValue.textContent =
+                `${Math.round(
+                    labelScale * 100
+                )}%`;
+        }
+
         document
             .querySelectorAll(
-                '#otm-control-panel button'
+                '#otm-control-panel button[data-contour-scale]'
             )
             .forEach(
                 button => {
+                    const active =
+                        Number(
+                            button.dataset.contourScale
+                        )
+                        === contourScale;
 
+                    styleActiveButton(
+                        button,
+                        active
+                    );
+                }
+            );
+
+        document
+            .querySelectorAll(
+                '#otm-control-panel button[data-extra-toggle]'
+            )
+            .forEach(
+                button => {
                     let active = false;
 
                     if (
-                        button.dataset.type
-                        === 'label'
-                    ) {
-                        active =
-                            Number(
-                                button.dataset.scale
-                            )
-                            === labelScale;
-
-                    } else if (
-                        button.dataset.type
-                        === 'contour'
-                    ) {
-                        active =
-                            Number(
-                                button.dataset.scale
-                            )
-                            === contourScale;
-
-                    } else if (
                         button.dataset.extraToggle
                         === 'on'
                     ) {
@@ -1879,22 +2489,22 @@ out body;
                             !extraNamesOn;
                     }
 
-                    button.style.fontWeight =
+                    styleActiveButton(
+                        button,
                         active
-                            ? 'bold'
-                            : 'normal';
-
-                    button.style.outline =
-                        active
-                            ? '2px solid #000'
-                            : 'none';
-
-                    button.style.background =
-                        active
-                            ? '#e5e5e5'
-                            : '#f7f7f7';
+                    );
                 }
             );
+
+        const colorSelect =
+            document.getElementById(
+                'otm-contour-color'
+            );
+
+        if (colorSelect) {
+            colorSelect.value =
+                contourColor;
+        }
 
         const refreshButton =
             document.getElementById(
@@ -1915,6 +2525,26 @@ out body;
                     ? 'pointer'
                     : 'default';
         }
+    }
+
+    function styleActiveButton(
+        button,
+        active
+    ) {
+        button.style.fontWeight =
+            active
+                ? 'bold'
+                : 'normal';
+
+        button.style.outline =
+            active
+                ? '2px solid #000'
+                : 'none';
+
+        button.style.background =
+            active
+                ? '#e5e5e5'
+                : '#f7f7f7';
     }
 
     function updateStatus() {
