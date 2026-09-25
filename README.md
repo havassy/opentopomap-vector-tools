@@ -1,35 +1,48 @@
 # OpenTopoMap Vector – saját beállítások
 
-Egy Violentmonkey userscript az OpenTopoMap vektoros változatához.
+Violentmonkey userscript az OpenTopoMap vektoros változatához.
 
-A script célja, hogy néhány olyan beállítást tegyen könnyen módosíthatóvá, amely az eredeti OpenTopoMap Vector felületén nem állítható közvetlenül.
+A script célja, hogy kivetítéskor vagy oktatási használat során jobban láthatóvá és könnyebben beállíthatóvá tegye az OpenTopoMap Vector térképet.
+
+## Képernyőkép
+
+![OpenTopoMap Vector Tools](minta.png)
 
 ## Funkciók
 
 A script jelenleg az alábbi lehetőségeket adja hozzá:
 
-- a térképi feliratok méretének módosítása
-- a szintvonalak vastagságának módosítása
-- opcionális kiegészítő domborzati nevek megjelenítése OpenStreetMap-adatokból
-- a kiegészítő domborzati nevek kézi frissítése
+- a térképi feliratok méretének módosítása 100–300% között;
+- a szintvonalak vastagságának módosítása;
+- a szintvonalak színének módosítása;
+- a szintvonalak magasságfeliratainak a vonalakkal azonos színű megjelenítése;
+- opcionális kiegészítő domborzati nevek megjelenítése OpenStreetMap-adatokból;
+- a kiegészítő domborzati nevek kézi frissítése;
+- összecsukható kezelőpanel.
 
 A kezelőpanel a térkép jobb felső részén jelenik meg.
 
 ## Feliratméret
 
-A térképi feliratok mérete az alábbi értékek közül választható:
+A térképi feliratok mérete egy csúszkával állítható.
 
-- 100%
-- 125%
-- 150%
-- 175%
-- 200%
+Tartomány:
+
+- minimum: 100%
+- maximum: 300%
+- lépésköz: 25%
+
+Lehetséges értékek:
+
+`100% · 125% · 150% · 175% · 200% · 225% · 250% · 275% · 300%`
 
 A kiválasztott értéket a script elmenti, így az a következő megnyitáskor is megmarad.
 
-## Szintvonal-vastagság
+## Szintvonalak
 
-A vektoros OpenTopoMap szintvonalainak vastagsága szintén az alábbi értékek közül állítható:
+### Vastagság
+
+A vektoros OpenTopoMap szintvonalainak vastagsága az alábbi értékek közül választható:
 
 - 100%
 - 125%
@@ -37,7 +50,32 @@ A vektoros OpenTopoMap szintvonalainak vastagsága szintén az alábbi értékek
 - 175%
 - 200%
 
-Ez a beállítás is megmarad a következő használatig.
+A kiválasztott értéket a script elmenti.
+
+### Szín
+
+A szintvonalak színe az alábbi lehetőségek közül választható:
+
+- Eredeti
+- Sötétbarna
+- Sötétszürke
+- Fekete
+
+A szintvonalakon megjelenő magasságértékek színe automatikusan követi a szintvonal színét.
+
+Így könnyebben felismerhető, hogy az adott számok a szintvonalak magasságértékei.
+
+A kiválasztott színt a script szintén megjegyzi.
+
+## Összecsukható kezelőpanel
+
+A teljes kezelőpanel összecsukható.
+
+Nyitott állapotban minden beállítás elérhető, összecsukva pedig csak a panel fejléce marad látható.
+
+Ez különösen hasznos kivetítéskor, amikor a beállítások elvégzése után célszerű minél nagyobb térképfelületet szabadon hagyni.
+
+A panel minden új oldalbetöltéskor nyitott állapotban indul.
 
 ## Domborzati nevek
 
@@ -88,7 +126,9 @@ Ez akkor lehet hasznos, ha:
 
 ## Adatforrások
 
-A script az OpenTopoMap Vector térképet módosítja, és a kiegészítő domborzati nevekhez az OpenStreetMap adatait használja.
+A script az OpenTopoMap Vector térképet módosítja.
+
+A kiegészítő domborzati nevekhez az OpenStreetMap adatait használja.
 
 Az OSM-adatok lekérdezése Overpass API-n keresztül történik.
 
@@ -108,29 +148,40 @@ Fontos: a gyorsítótár tartalma csak akkor kerül vissza a térképre, ha a fe
 
 ### 1. Violentmonkey telepítése
 
-Telepíts egy userscript-kezelőt, például a Violentmonkey bővítményt.
+A script használatához szükség van egy userscript-kezelő böngészőbővítményre, például a Violentmonkeyra.
+
+Chrome esetén a Violentmonkey a Chrome Webáruházból telepíthető.
 
 ### 2. A script telepítése
 
-Nyisd meg a `.user.js` fájlt Raw nézetben a GitHubon.
+A Violentmonkey telepítése után nyisd meg az alábbi linket:
 
-Ha a userscript-kezelő megfelelően működik, fel kell ajánlania a script telepítését.
+https://raw.githubusercontent.com/havassy/opentopomap-vector-tools/main/opentopomap-vector-tools.user.js
 
-### 3. OpenTopoMap megnyitása
+A Violentmonkey felismeri a `.user.js` fájlt, és felajánlja a script telepítését.
+
+### 3. OpenTopoMap Vector megnyitása
 
 A script ezen az oldalon működik:
 
-`https://www.opentopomap.org/vector/`
+https://www.opentopomap.org/vector/
 
-Az oldal újratöltése után meg kell jelennie a saját kezelőpanelnek.
+Az oldal újratöltése után meg kell jelennie a jobb felső sarokban az új kezelőpanelnek.
 
 ## Használat
 
-A jobb felső sarokban megjelenő panelen három rész látható:
+A kezelőpanel fő részei:
 
 - Feliratméret
 - Szintvonal
 - Domborzati nevek
+
+A feliratméret csúszkával állítható.
+
+A szintvonalaknál külön beállítható:
+
+- a vastagság;
+- a szín.
 
 A domborzati neveknél három gomb található:
 
@@ -138,34 +189,44 @@ A domborzati neveknél három gomb található:
 - `KI`
 - `Frissítés`
 
+A panel fejléce segítségével a teljes kezelőfelület összecsukható és újra kinyitható.
+
+## Állapotjelzés
+
 A script állapotsora jelzi többek között:
 
 - hogy a térkép sikeresen elérhető-e;
 - hány feliratréteget kezel;
-- hogy a domborzati nevek ki vannak-e kapcsolva;
+- hogy a kiegészítő domborzati nevek be vagy ki vannak-e kapcsolva;
 - folyamatban van-e lekérdezés;
 - hány kiegészítő név töltődött be;
 - történt-e lekérdezési hiba.
 
 ## Fontos megjegyzés
 
-A script csak a vektoros OpenTopoMap változathoz készült.
+A script csak az OpenTopoMap **vektoros** változatához készült.
 
-A raszteres OpenTopoMap feliratai és szintvonalai egyetlen képcsempébe vannak beégetve, ezért azok külön-külön nem módosíthatók ugyanilyen módon.
+A klasszikus raszteres OpenTopoMap feliratai és szintvonalai a képcsempék részét képezik, ezért azok külön-külön nem módosíthatók ugyanilyen módon.
 
-A vektoros OpenTopoMap domborzati szintvonalai nem feltétlenül egyeznek pontosan a klasszikus raszteres OpenTopoMap szintvonalaival, mert a két változat eltérő domborzatmodellből és eltérő feldolgozással készülhet.
+A vektoros és a raszteres OpenTopoMap szintvonalai nem feltétlenül esnek pontosan egybe, mert a két változat eltérő domborzatmodellből és eltérő feldolgozással készülhet.
 
 ## Verzió
 
 Jelenlegi verzió:
 
-`2.1`
+`2.2`
 
 ## Fájl
 
-Javasolt fájlnév:
+A userscript fájl neve:
 
 `opentopomap-vector-tools.user.js`
+
+## Projekt
+
+GitHub repository:
+
+https://github.com/havassy/opentopomap-vector-tools
 
 ## Licenc
 
